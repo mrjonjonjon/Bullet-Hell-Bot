@@ -36,13 +36,15 @@ class model:
   def Q(self,state:state,action:list,dt):
       
       player,particles = state.player,state.particles
-      player_speed=np.array(player.speed)
-      action_direction = lineintersectionutil.normalize(np.array(action))
       
+      player_speed=player.speed
+      action_direction = lineintersectionutil.normalize(np.array(action))
+      print(f"{player.x} , {player.y} , {player_speed} , {action_direction} , {dt}")
       future_player_position = np.add(
-           np.array(player.x,player.y),
+           np.array([player.x,player.y]),
            player_speed * action_direction * dt
           ) 
+      
       #simple model. only care if we're on a particle trajectory
       res=0
       for particle in particles:
