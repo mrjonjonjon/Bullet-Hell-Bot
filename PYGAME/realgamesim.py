@@ -8,7 +8,7 @@ import random
 import numpy as np
 import lineintersectionutil
 import player_AI
-
+from lineintersectionutil import normalize
 
 pg.display.init()
 pg.font.init()
@@ -17,9 +17,7 @@ screen = pg.display.set_mode((800,600))
 SCREEN_WIDTH,SCREEN_HEIGHT=pg.display.get_window_size()
 
 
-def normalize(v):
-    v=np.array(v)
-    return v / np.sqrt(np.sum(v**2))
+
 class Particle:
   def __init__(self, coord, rad,velocity=[0,0],bounce=False):
     x,y=coord
@@ -78,7 +76,7 @@ class Particle:
               self.velocity[1]*=-1
       
 class Player:
-  def __init__(self, coord, rad,speed=5,colour=(255,0,0)):
+  def __init__(self, coord, rad,speed=5,colour=(255,0,0),AI=False):
     x,y=coord
     self.x = x
     self.y = y
@@ -87,13 +85,17 @@ class Player:
     self.thickness = 1
     self.speed = speed
     self.velocity=[0,0]
+    self.AI=AI
 
 
   def draw(self,display_trajectory=False):
     global screen
     pg.draw.circle(screen, self.colour, (self.x, self.y), self.rad)
 
-  def set_velocity(self):
+  def set_velocity(self,best_action:list =None):
+        if self.AI:
+            self.velocity = np.array(normalize(best_action))
+            return
         keys = pg.key.get_pressed()  #checking pressed keys
         self.velocity=np.array([0,0])
         if keys[pg.K_LEFT]:
@@ -109,7 +111,7 @@ class Player:
 
       
   def update_position(self,dt):
-        self.set_velocity()
+       # self.set_velocity()
         
         player.x +=self.velocity[0]
         player.y +=self.velocity[1]
@@ -142,10 +144,10 @@ FPS = 60
 clock = pg.time.Clock()
 
 running=True
-player = Player(coord=(SCREEN_WIDTH/2, SCREEN_HEIGHT/2),rad=20,speed=0.3,colour=(0,0,255))
+player = Player(coord=(SCREEN_WIDTH/2, SCREEN_HEIGHT/2),rad=20,speed=0.3,colour=(0,0,255),AI=True)
 
 
-parts=spawn_particles(1,velocty_multiplier=0.2,bounce=True)
+parts=spawn_particles(5,velocty_multiplier=2,bounce=True)
 
 
 
@@ -158,12 +160,15 @@ while running:
         for event in pg.event.get():
              if event.type==pg.QUIT:
                 running=False
-        
+       
+        model = player_AI.model(player,parts,rad=5)
+        player_state = player_AI.state(player,parts)
+        action_scores = {tuple(action): model.Q(player_state,action,dt) for action in player_AI.ACTIONS}
+        best_action = max(action_scores, key=action_scores.get)
+        player.set_velocity(best_action)
         player.update_position(dt)
         player.draw() 
-        #model = player_AI.model(player,parts,rad=5)
-        #player_state = player_AI.state(player,parts)
-        #action_scores = {action: model.Q(player_state,action,dt) for action in player_AI.ACTIONS}
+
         #lineintersectionutil.draw_text(f'SCORE : {player_state.U()}',screen,(SCREEN_WIDTH/2,50))
         for p in parts:
             p.update_position(dt)

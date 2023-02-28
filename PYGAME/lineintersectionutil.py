@@ -21,12 +21,15 @@ from shapely.geometry import Point
 from shapely.geometry import LineString
 
 def normalize(v):
-    return v / np.sqrt(np.sum(v**2))
+    if norm(v)==0:
+        return v
+    return v / norm(v)
 
+#projects point (x,y) onto line defined by points (p0,p1) and (q0,q1)
 def project_onto(point:tuple[float,float],line_points:list[tuple[float,float]]):
     point = Point(*point)
     line = LineString([*line_points])
-
+    #print(f"POINT {point}\n")
     x = np.array(point.coords[0])
 
     u = np.array(line.coords[0])
