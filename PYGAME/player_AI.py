@@ -15,6 +15,7 @@ ACTIONS =[
            [-1,1],#MOVE LEFT AND DOWN
            [-1,-1]#MOVE LEFT AND UP
            
+           
            ]
 class state:
     def __init__(self,player,particles) -> None:
@@ -22,7 +23,7 @@ class state:
        self.particles = particles
    
    
-   
+
    
    
 #parametrized model
@@ -33,25 +34,35 @@ class model:
         #radius in which particles are "seen" by the player
         self.rad=rad
     
-  def Q(self,state:state,action:list,dt):
+  #ideas:
+  # add continuous function to mediate how much each bullet is weighted(depending on time to mindist) instead of binary
+  #add continuous weight to encourage it to stay in the middle of the arena
+  #to decide when to dodgeroll, could set threshold for sum of bullet "urgencies"
+  def Q(self,state:state,action:list,dt,SCREEN_WIDTH,SCREEN_HEIGHT):
       
       player,particles = state.player,state.particles
       
       player_speed=player.speed
       action_direction = lineintersectionutil.normalize(np.array(action))
-      print(f"{player.x} , {player.y} , {player_speed} , {action_direction} , {dt}")
+      #print(f"{player.x} , {player.y} , {player_speed} , {action_direction} , {dt}")
       future_player_position = np.add(
            np.array([player.x,player.y]),
            player_speed * action_direction * dt
           ) 
       
       #simple model. only care if we're on a particle trajectory
-      res=0
+      res=1000000000
+      min_perp_dist=1000000
       for particle in particles:
             perp_dist,moving_towards_player,time_to_min_dist,part_on_target = lineintersectionutil.perp_dist_part_player(particle,player_position=[future_player_position[0],future_player_position[1]],player_rad=player.rad,draw=False,screen=None)
-            if part_on_target:
-                res-=1
-      return res
+            min_perp_dist=min(min_perp_dist,perp_dist)
+            if time_to_min_dist>0 and time_to_min_dist<500:
+                res=min(res,perp_dist)
+      if lineintersectionutil.get_distance_from_screen_edge([future_player_position[0],future_player_position[1]],SCREEN_WIDTH,SCREEN_HEIGHT)<50:
+          res -= 10000000000
+      
+      return res 
+
 
       
   def U(self,state:state):
@@ -59,7 +70,10 @@ class model:
     
     score=0
     for particle in particles:
-        perp_dist,moving_towards_player,time_to_min_dist,part_on_target = lineintersectionutil.perp_dist_part_player(particle,player,draw=False,screen=None)
+        perp_dist,moving_towards_player,time_to_min_dist,part_on_target,*_ = lineintersectionutil.perp_dist_part_player(particle,player,draw=False,screen=None)
+        if len(_)>0:
+            print("WARNING. UNUSED OUTPUT")
+            return
         if part_on_target:
             score -= 1/max(0.1,time_to_min_dist)
         else:

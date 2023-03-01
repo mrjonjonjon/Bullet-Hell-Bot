@@ -1,9 +1,16 @@
 import numpy as np
 import pygame as pg
+def element_wise_mul(l1,l2):
+    res= [a*b for a,b in zip(l1,l2)]
+    return res
+
+def scale_list(l1,s):
+    res = [s*e for e in l1]
+    return res
 def lineLineIntersect(P0, P1, Q0, Q1):  
     d = (P1[0]-P0[0]) * (Q1[1]-Q0[1]) + (P1[1]-P0[1]) * (Q0[0]-Q1[0]) 
     if d == 0:
-        print('vsovneon')
+        #print('vsovneon')
         return None
     t = ((Q0[0]-P0[0]) * (Q1[1]-Q0[1]) + (Q0[1]-P0[1]) * (Q0[0]-Q1[0])) / d
     u = ((Q0[0]-P0[0]) * (P1[1]-P0[1]) + (Q0[1]-P0[1]) * (P0[0]-P1[0])) / d
@@ -26,7 +33,7 @@ def normalize(v):
     return v / norm(v)
 
 #projects point (x,y) onto line defined by points (p0,p1) and (q0,q1)
-def project_onto(point:tuple[float,float],line_points:list[tuple[float,float]]):
+def project_onto(point:tuple,line_points:list):
     point = Point(*point)
     line = LineString([*line_points])
     #print(f"POINT {point}\n")
@@ -41,8 +48,24 @@ def project_onto(point:tuple[float,float],line_points:list[tuple[float,float]]):
     P = u + n*np.dot(x - u, n)
     return tuple(P)
 
+def get_distance_from_screen_edge(point:list,SCREEN_WIDTH,SCREEN_HEIGHT):
+    window_lines = [[(0,0),(SCREEN_WIDTH,0)],
+                        [(SCREEN_WIDTH,0),(SCREEN_WIDTH,SCREEN_HEIGHT)],
+                        [(SCREEN_WIDTH,SCREEN_HEIGHT),(0,SCREEN_HEIGHT)],
+                        [(0,SCREEN_HEIGHT),(0,0)]
+                        ]
+     
+    my_point = list(point)
+    
+    res=1000000000000000
+    for wl in window_lines:
+        projected_point = project_onto(my_point,wl)
+        perp_line = [projected_point[0] - point[0],projected_point[1]-point[1]]
+        res=min(res, norm(np.array(perp_line)))
+    return res
+    
 #print(project_onto(point=(5,5),line_points=[(0,0),(1,0)]))
-def draw_text(text:str,screen,pos:tuple[int,int]):
+def draw_text(text:str,screen,pos:tuple):
   
     font = pg.font.SysFont(None, 24)
     img = font.render(text, True, (255,255,255))
@@ -70,4 +93,5 @@ def perp_dist_part_player(p,player_position:list,player_rad,draw=False,screen=No
             part_on_target = (perp_dist< (player_rad + p.rad))  and moving_towards_player
             return perp_dist, moving_towards_player,time_to_min_dist,part_on_target
         
+
 
