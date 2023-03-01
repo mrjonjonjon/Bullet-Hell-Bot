@@ -14,6 +14,7 @@ pg.display.init()
 pg.font.init()
 SCREEN_WIDTH,SCREEN_HEIGHT=800,600
 INVINCIBILITY_PERIOD = 1000
+PLAYER_COLOR = (255,255,0)
 screen = pg.display.set_mode((SCREEN_WIDTH,SCREEN_HEIGHT))
 
 
@@ -76,7 +77,7 @@ class Particle:
               self.velocity[1]*=-1
       
 class Player:
-  def __init__(self, coord, rad,speed=5,colour=(255,0,0),AI=False):
+  def __init__(self, coord, rad,speed=5,colour=PLAYER_COLOR,AI=False):
     x,y=coord
     self.x = x
     self.y = y
@@ -152,7 +153,7 @@ class Player:
         self.invincible_timer -=dt
         self.invincible_timer=max(0,self.invincible_timer)
         if self.invincible_timer ==0:
-            self.colour = (0,0,255)
+            self.colour = PLAYER_COLOR
             
 
   def update_dodge_roll(self,dt):
@@ -164,7 +165,7 @@ class Player:
       if self.dodge_roll_timer>0:
             self.colour = (255,255,255)
       elif self.dodge_roll_timer==0 and prev_timer>0:
-            self.colour=(0,0,255)
+            self.colour=PLAYER_COLOR
             self.dodge_roll_dir=[0,0]
       
       
@@ -173,116 +174,141 @@ class Player:
         self.dodge_roll_dir=dir
         self.dodge_roll_timer=self.dodge_roll_dist/self.dodge_roll_speed
 
-def spawn_particles(num,velocty_multiplier=1,bounce=False,velocity=None,uniformY=False):
-    parts=[]
+
+
+class Game:
+    def __init__(self,FPS=60) -> None:
+        self.FPS=FPS
+        #self.player=None
+        #self.parts=None
+        self.clock = pg.time.Clock()
+        self.time_since_game_start=0
+        self.running=False
+        self.player = Player(coord=(SCREEN_WIDTH/2, SCREEN_HEIGHT/2),rad=5,speed=0.1,colour=PLAYER_COLOR,AI=True)
+        self.parts=self.spawn_particles(50,velocty_multiplier=1,bounce=True,uniformY=True,velocity=None)
     
-    def coord_gen():
-        if uniformY:
-            initial = [0,0]
-            while True:
-                initial = [0,initial[1] + SCREEN_HEIGHT/num]
-                yield initial
+    
+    
+    
+    def spawn_particles(self,num,velocty_multiplier=1,bounce=False,velocity=None,uniformY=False):
+        parts=[]
+        
+        def coord_gen():
+            if uniformY:
+                initial = [0,0]
+                while True:
+                    initial = [0,initial[1] + SCREEN_HEIGHT/num]
+                    yield initial
+                    
+            else:
+                while True:
+                    yield [ random.randrange(0,SCREEN_WIDTH) ,   random.randrange(0,SCREEN_HEIGHT) ]
+                    
+        #THIS NEEDS TO BE HERE. DONT KNOW WHY          
+        gen = coord_gen()
+        
+        for i in range(num):
+            if velocity is None:
+                particle_velocity=[velocty_multiplier*(random.random()-0.5),velocty_multiplier*(random.random()-0.5)]
+            else:
+                particle_velocity = velocity
                 
-        else:
-            while True:
-                yield [ random.randrange(0,SCREEN_WIDTH) ,   random.randrange(0,SCREEN_HEIGHT) ]
+            
+            parts.append(
+                Particle(
+                coord=next(gen),
+                rad=5,
+                velocity= lineintersectionutil.scale_list(particle_velocity,velocty_multiplier),
+                bounce=bounce
+                )
+                )
+            
+
+        return parts
+
+
+    def reset(self):
+        #self.start_game()
+        #self.FPS=FPS
+        #self.player=None
+        #self.parts=None
+        #self.clock = pg.time.Clock()
+        self.__init__(FPS=60)
+        
+    def step(self):
+                player = self.player
+                parts=self.parts
+                clock=self.clock
+                FPS=self.FPS
+                screen.fill((0,0,0))
+                #TIME IN MILLISECONDS SINCE PREVIOUS CALL(FRAME)
+                dt=clock.tick(FPS)
+                self.time_since_game_start+=dt
+                for event in pg.event.get():
+                    if event.type==pg.QUIT:
+                        self.running=False
+                    if event.type == pg.KEYDOWN:
+                        if event.key == pg.K_SPACE:
+                            dir = player.get_dir()
+                            if lineintersectionutil.norm(dir)>0:
+                                player.dodge_roll(list(dir))
+                        
+            
+                model = player_AI.model(player,parts,rad=5)
+                player_state = player_AI.state(player,parts)
+                action_scores = {tuple(action): model.Q(player_state,action,dt,SCREEN_WIDTH,SCREEN_HEIGHT) for action in player_AI.ACTIONS}
+                best_action = max(action_scores, key=action_scores.get)
                 
-    #THIS NEEDS TO BE HERE. DONT KNOW WHY          
-    gen = coord_gen()
-    
-    for i in range(num):
-        if velocity is None:
-            particle_velocity=[velocty_multiplier*(random.random()-0.5),velocty_multiplier*(random.random()-0.5)]
-        else:
-            particle_velocity = velocity
+                print(f'OPTIMAL ACTION IS TO MOVE {best_action}')
+                
+                player.set_velocity(best_action)
+                player.update_position(dt)
+                player.update_invincible(dt)
+                player.update_dodge_roll(dt)
+                player.draw() 
+                
+                
             
+                for p in parts:
+                    p.update_position(dt)
+                    p.draw(True)
+                    #HIT DETECTION
+                    perp_dist,moving_towards_player,time_to_min_dist,part_on_target = lineintersectionutil.perp_dist_part_player(p,[player.x,player.y],player_rad=player.rad, draw=False,screen=screen)
+                    if player.invincible_timer<=0 and lineintersectionutil.norm([p.x-player.x,p.y-player.y])<=1 +p.rad + player.rad:
+                        
+                        player.health-=1
+                        player.invincible_timer=INVINCIBILITY_PERIOD
+                        player.colour = (0,255,0)
+                        
+                    #draw_text(f'time_to_min_dist :{round(time_to_min_dist/1000,2)}  ,  {part_on_target}',screen,(SCREEN_WIDTH/2,10))
+                lineintersectionutil.draw_text(f'AI CONTROL : {("YES" if player.AI else "NO")}',screen,(SCREEN_WIDTH/1.5,0))
+                lineintersectionutil.draw_text(f'HEALTH : {player.health}',screen,(SCREEN_WIDTH/1.5,20))
+                lineintersectionutil.draw_text(f'OPTIMAL ACTION : {best_action}',screen,(SCREEN_WIDTH/1.5,40))
+                lineintersectionutil.draw_text(f'INVINCIBLE : {("YES" if player.invincible_timer>0 else "NO")}',screen,(SCREEN_WIDTH/1.5,60))
+                lineintersectionutil.draw_text(f'INVINCIBLE TIMER : {player.invincible_timer}',screen,(SCREEN_WIDTH/1.5,80))
+
+                pg.display.update()
+                if player.health==0:
+                    print(f"TOOK {self.time_since_game_start/1000} SECONDS TO DIE ")
+                    return
         
-        parts.append(
-            Particle(
-            coord=next(gen),
-            rad=5,
-            velocity= lineintersectionutil.scale_list(particle_velocity,velocty_multiplier),
-            bounce=bounce
-            )
-            )
+    
+    def start_game(self):
+    ######### G A M E #############
+        self.running=True
+        #FPS = 60
+       # sclock = pg.time.Clock()
+        #self.time_since_game_start=0
+        #running=True
+        #self.player = Player(coord=(SCREEN_WIDTH/2, SCREEN_HEIGHT/2),rad=5,speed=0.1,colour=PLAYER_COLOR,AI=True)
+        #self.parts=self.spawn_particles(50,velocty_multiplier=1,bounce=True,uniformY=True,velocity=None)
+        while self.running:
+            self.step()
         
 
-    return parts
 
 
-
-
-def reset():
-    start_game()
-
-def start_game():
-######### G A M E #############
-    
-    FPS = 60
-    clock = pg.time.Clock()
-    time_since_game_start=0
-    running=True
-    player = Player(coord=(SCREEN_WIDTH/2, SCREEN_HEIGHT/2),rad=5,speed=0.1,colour=(0,0,255),AI=True)
-
-
-    parts=spawn_particles(50,velocty_multiplier=1,bounce=True,uniformY=True,velocity=None)
-
-
-
-
-    
-    while running and time_since_game_start<500000000:
-            will_dodge_roll=False
-            screen.fill((0,0,0))
-            #TIME IN MILLISECONDS SINCE PREVIOUS CALL(FRAME)
-            dt=clock.tick(FPS)
-            time_since_game_start+=dt
-            for event in pg.event.get():
-                if event.type==pg.QUIT:
-                    running=False
-                if event.type == pg.KEYDOWN:
-                    if event.key == pg.K_SPACE:
-                        dir = player.get_dir()
-                        if lineintersectionutil.norm(dir)>0:
-                            player.dodge_roll(list(dir))
-                    
-        
-            model = player_AI.model(player,parts,rad=5)
-            player_state = player_AI.state(player,parts)
-            action_scores = {tuple(action): model.Q(player_state,action,dt,SCREEN_WIDTH,SCREEN_HEIGHT) for action in player_AI.ACTIONS}
-            best_action = max(action_scores, key=action_scores.get)
-            
-            print(f'OPTIMAL ACTION IS TO MOVE {best_action}')
-            
-            player.set_velocity(best_action)
-            player.update_position(dt)
-            player.update_invincible(dt)
-            player.update_dodge_roll(dt)
-            player.draw() 
-            
-            
-           
-            for p in parts:
-                p.update_position(dt)
-                p.draw(True)
-                #HIT DETECTION
-                perp_dist,moving_towards_player,time_to_min_dist,part_on_target = lineintersectionutil.perp_dist_part_player(p,[player.x,player.y],player_rad=player.rad, draw=False,screen=screen)
-                if player.invincible_timer<=0 and lineintersectionutil.norm([p.x-player.x,p.y-player.y])<=1 +p.rad + player.rad:
-                    
-                    player.health-=1
-                    player.invincible_timer=INVINCIBILITY_PERIOD
-                    player.colour = (0,255,0)
-                    
-                #draw_text(f'time_to_min_dist :{round(time_to_min_dist/1000,2)}  ,  {part_on_target}',screen,(SCREEN_WIDTH/2,10))
-            lineintersectionutil.draw_text(f'AI CONTROL : {("YES" if player.AI else "NO")}',screen,(SCREEN_WIDTH/2,0))
-            lineintersectionutil.draw_text(f'HEALTH : {player.health}',screen,(SCREEN_WIDTH/2,20))
-            lineintersectionutil.draw_text(f'OPTIMAL ACTION : {best_action}',screen,(SCREEN_WIDTH/2,40))
-            lineintersectionutil.draw_text(f'INVINCIBLE : {("YES" if player.invincible_timer>0 else "NO")}',screen,(SCREEN_WIDTH/2,60))
-            lineintersectionutil.draw_text(f'INVINCIBLE TIMER : {player.invincible_timer}',screen,(SCREEN_WIDTH/2,80))
-
-            pg.display.update()
-    #game stopped running
-    return player.health
-            
 if __name__=='__main__':
-        episode = start_game()
+ 
+        game = Game(FPS=60)
+        game.start_game()
