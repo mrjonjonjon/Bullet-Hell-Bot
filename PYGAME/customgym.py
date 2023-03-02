@@ -31,31 +31,38 @@ class BulletHellEnv(gym.Env):
   }
   def __init__(self):
     super(BulletHellEnv, self).__init__()
-    self.game = realgamesim.Game(FPS=60)
+    self.game = realgamesim.Game(FPS=60,AI_control=True)
 
     self.action_space = spaces.Discrete(9)#9 movement, 8 dodgeroll
    
     # The observation will be the coordinate of the agent
     # this can be described both by Discrete and Box space
-    self.observation_space = spaces.Discrete(1)
+    #self.observation_space = spaces.Discrete(1)
+    
+    s = {
+    'position': spaces.Box(low=0, high=100, shape=(2,)),
+    'bullet_positions': spaces.Sequence(spaces.Box(low=0,high=100,shape=(2,)))
+    }
+    self.observation_space = spaces.Dict(s)
 
   def reset(self):
     """
     Important: the observation must be a numpy array
     :return: (np.array) 
     """
+    info={}
     self.game.reset()
-    return np.array([0])
+    return {'position':np.array([0,0]), 'bullet_positions':np.array([0,0]) },info
 
   def step(self, action):
       info ={}
       dir=[0,0]
       #print("TYPE: ",action.item(),type(action.item()))
-      print(action,type(action))
+      #print(action,type(action))
       dir = self.ACTIONS[action]
       observation,reward,done = self.game.step(dir)
-      truncated=0
-      return observation,reward,done,info
+      truncated=False
+      return observation,reward,done,truncated,info
   
   def render(self,mode='human'):
         self.game.render()
@@ -65,29 +72,31 @@ class BulletHellEnv(gym.Env):
 
 
 
+env = BulletHellEnv()
+# It will check your custom environment and output additional warnings if needed
+check_env(env)
 
+print("ENVIRONMENT IS VALID")
 
-if __name__=='__main__':
-    # Instantiate the env
-   # Instantiate the env
-    env = BulletHellEnv()
-   
-    obs = env.reset()
-    n_steps = 10000
-    for step in range(n_steps):
-                # Box(4,) means that it is a Vector with 4 components
-        print("Observation space:", env.observation_space)
-        print("Shape:", env.observation_space.shape)
-        # Discrete(2) means that there is two discrete actions
-        print("Action space:", env.action_space)
+env = BulletHellEnv()
+obs = env.reset()
+#VERIFY THAT ENV WORKS
+'''n_steps = 10
+for _ in range(n_steps):
+    # Random action
+    action = env.action_space.sample()
+    obs, reward, done, truncated,info = env.step(action)
+    env.render()
+    if done:
+        obs = env.reset()'''
+#TRAIN MODEL
+model = DQN('MlpPolicy', env).learn(total_timesteps=1,progress_bar=True)
+print("DONE LEARNING")
 
-        # The reset method is called at the beginning of an episode
-        obs = env.reset()
-        # Sample a random action
-        action = env.action_space.sample()
-        print("Sampled action:", action)
-        obs, reward, done, info = env.step(action)
-        # Note the obs is a numpy array
-        # info is an empty dict for now but can contain any debugging info
-        # reward is a scalar
-        #print(obs.shape, reward, done, info)
+print("SHOWING POLICY")
+for i in range(1000):
+    action, _states = model.predict(np.array([0]))
+    action=action.item()
+    print(f'ACTION: {action},STATES: {_states}')
+    obs, rewards, term,trunc, info = env.step(action)
+    env.render()

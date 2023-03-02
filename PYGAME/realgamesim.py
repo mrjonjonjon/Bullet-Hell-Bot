@@ -185,9 +185,11 @@ class Game:
         self.clock = pg.time.Clock()
         self.time_since_game_start=0
         self.running=False
-        self.player = Player(coord=(SCREEN_WIDTH/2, SCREEN_HEIGHT/2),rad=5,speed=0.1,colour=PLAYER_COLOR,AI=AI_control)
+        self.AI_control=AI_control
+        
+        self.player = Player(coord=(SCREEN_WIDTH/2, SCREEN_HEIGHT/2),rad=5,speed=0.1,colour=PLAYER_COLOR,AI=self.AI_control)
         self.parts=self.spawn_particles(50,velocty_multiplier=1,bounce=True,uniformY=True,velocity=None)
-    
+        
     
     
     def render(self):
@@ -236,7 +238,7 @@ class Game:
         #self.player=None
         #self.parts=None
         #self.clock = pg.time.Clock()
-        self.__init__(FPS=60)
+        self.__init__(FPS=60,AI_control=self.AI_control)
         
     def step(self,action = None):
                 reward=0
