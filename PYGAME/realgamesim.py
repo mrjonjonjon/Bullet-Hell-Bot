@@ -96,6 +96,7 @@ class Player:
     self.dodge_roll_dir=[0,0]
     #above 0 if the player is dodgerolling
     self.dodge_roll_timer=0
+    self.running = True
     
 
   def draw(self,display_trajectory=False):
@@ -119,7 +120,7 @@ class Player:
 
 
       
-  def set_velocity(self,best_action:list =None):
+  def set_velocity(self,best_action:list = None):
         if self.dodge_roll_dir!=[0,0]:
             self.velocity = normalize(self.dodge_roll_dir)*self.dodge_roll_speed
             return
@@ -177,19 +178,21 @@ class Player:
 
 
 class Game:
-    def __init__(self,FPS=60) -> None:
+    def __init__(self,FPS=60,AI_control=False) -> None:
         self.FPS=FPS
         #self.player=None
         #self.parts=None
         self.clock = pg.time.Clock()
         self.time_since_game_start=0
         self.running=False
-        self.player = Player(coord=(SCREEN_WIDTH/2, SCREEN_HEIGHT/2),rad=5,speed=0.1,colour=PLAYER_COLOR,AI=True)
+        self.player = Player(coord=(SCREEN_WIDTH/2, SCREEN_HEIGHT/2),rad=5,speed=0.1,colour=PLAYER_COLOR,AI=AI_control)
         self.parts=self.spawn_particles(50,velocty_multiplier=1,bounce=True,uniformY=True,velocity=None)
     
     
     
-    
+    def render(self):
+        pg.display.update()
+        
     def spawn_particles(self,num,velocty_multiplier=1,bounce=False,velocity=None,uniformY=False):
         parts=[]
         
@@ -235,7 +238,10 @@ class Game:
         #self.clock = pg.time.Clock()
         self.__init__(FPS=60)
         
-    def step(self):
+    def step(self,action = None):
+                reward=0
+        
+        
                 player = self.player
                 parts=self.parts
                 clock=self.clock
@@ -259,9 +265,9 @@ class Game:
                 action_scores = {tuple(action): model.Q(player_state,action,dt,SCREEN_WIDTH,SCREEN_HEIGHT) for action in player_AI.ACTIONS}
                 best_action = max(action_scores, key=action_scores.get)
                 
-                print(f'OPTIMAL ACTION IS TO MOVE {best_action}')
+                #print(f'OPTIMAL ACTION IS TO MOVE {best_action}')
                 
-                player.set_velocity(best_action)
+                player.set_velocity(action)
                 player.update_position(dt)
                 player.update_invincible(dt)
                 player.update_dodge_roll(dt)
@@ -277,6 +283,7 @@ class Game:
                     if player.invincible_timer<=0 and lineintersectionutil.norm([p.x-player.x,p.y-player.y])<=1 +p.rad + player.rad:
                         
                         player.health-=1
+                        reward=-1
                         player.invincible_timer=INVINCIBILITY_PERIOD
                         player.colour = (0,255,0)
                         
@@ -287,28 +294,26 @@ class Game:
                 lineintersectionutil.draw_text(f'INVINCIBLE : {("YES" if player.invincible_timer>0 else "NO")}',screen,(SCREEN_WIDTH/1.5,60))
                 lineintersectionutil.draw_text(f'INVINCIBLE TIMER : {player.invincible_timer}',screen,(SCREEN_WIDTH/1.5,80))
 
-                pg.display.update()
-                if player.health==0:
-                    print(f"TOOK {self.time_since_game_start/1000} SECONDS TO DIE ")
-                    return
+                #pg.display.update() -->moved to render
+                observation =0
+                done = player.health==0
+                
+                return observation,reward,done
         
     
     def start_game(self):
     ######### G A M E #############
         self.running=True
-        #FPS = 60
-       # sclock = pg.time.Clock()
-        #self.time_since_game_start=0
-        #running=True
-        #self.player = Player(coord=(SCREEN_WIDTH/2, SCREEN_HEIGHT/2),rad=5,speed=0.1,colour=PLAYER_COLOR,AI=True)
-        #self.parts=self.spawn_particles(50,velocty_multiplier=1,bounce=True,uniformY=True,velocity=None)
-        while self.running:
-            self.step()
-        
+        #moved to init
+         
+       
 
 
 
 if __name__=='__main__':
  
-        game = Game(FPS=60)
+        game = Game(FPS=60,AI_control=False)
         game.start_game()
+        while game.running:
+            game.step()
+            game.render()
