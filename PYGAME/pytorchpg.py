@@ -1,18 +1,31 @@
+
+import numpy as np
 import gym
+from gym import spaces
+import realgamesim
+from stable_baselines3 import DQN
+from stable_baselines3.common.env_checker import check_env
+from numpy import float32,array
+from collections import OrderedDict
+from customgym import BulletHellEnv
 
-from stable_baselines3 import A2C
 
-env = gym.make("CartPole-v1")
 
-model = A2C("MlpPolicy", env, verbose=1)
-model.learn(total_timesteps=10_000)
+env = BulletHellEnv()
+# It will check your custom environment and output additional warnings if needed
+check_env(env)
 
-vec_env = model.get_env()
-obs = vec_env.reset()
-for i in range(1000):
+print("ENVIRONMENT IS VALID")
+
+#VERIFY THAT ENV WORKS
+model = DQN.load("mlphell", env=env)
+
+
+print("SHOWING POLICY")
+obs,info =env.reset()
+print(obs)
+for i in range(10000):
     action, _state = model.predict(obs, deterministic=True)
-    obs, reward, done, info = vec_env.step(action)
-    vec_env.render(mode='human')
-    # VecEnv resets automatically
-    # if done:
-    #   obs = vec_env.reset()
+    #print(f'ACTIONl: {type(action)},STATES: {_state}')
+    obs, rewards, term,trunc, info = env.step(action.item())
+    env.render()

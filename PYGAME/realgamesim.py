@@ -4,11 +4,12 @@ path_root = Path(__file__).parents[2]
 sys.path.append(str(path_root))
 import pygame as pg
 import random
-
+from numpy import array,float32
 import numpy as np
 import lineintersectionutil
 import player_AI
 from lineintersectionutil import normalize
+from collections import OrderedDict
 
 pg.display.init()
 pg.font.init()
@@ -149,6 +150,14 @@ class Player:
         
         self.x +=self.velocity[0]*dt
         self.y +=self.velocity[1]*dt
+        if self.x<0:
+            self.x=0
+        if self.y<0:
+            self.y=0
+        if self.x>SCREEN_WIDTH:
+            self.x=SCREEN_WIDTH
+        if self.y>SCREEN_HEIGHT:
+            self.y=SCREEN_HEIGHT
       
   def update_invincible(self,dt):
         self.invincible_timer -=dt
@@ -185,9 +194,11 @@ class Game:
         self.clock = pg.time.Clock()
         self.time_since_game_start=0
         self.running=False
-        self.player = Player(coord=(SCREEN_WIDTH/2, SCREEN_HEIGHT/2),rad=5,speed=0.1,colour=PLAYER_COLOR,AI=AI_control)
-        self.parts=self.spawn_particles(50,velocty_multiplier=1,bounce=True,uniformY=True,velocity=None)
-    
+        self.AI_control=AI_control
+        
+        self.player = Player(coord=(SCREEN_WIDTH/2, SCREEN_HEIGHT/2),rad=5,speed=0.1,colour=PLAYER_COLOR,AI=self.AI_control)
+        self.parts=self.spawn_particles(20,velocty_multiplier=0.6,bounce=True,uniformY=True,velocity=None)
+        
     
     
     def render(self):
@@ -236,10 +247,10 @@ class Game:
         #self.player=None
         #self.parts=None
         #self.clock = pg.time.Clock()
-        self.__init__(FPS=60)
+        self.__init__(FPS=60,AI_control=self.AI_control)
         
     def step(self,action = None):
-                reward=0
+                reward=1
         
         
                 player = self.player
@@ -274,30 +285,33 @@ class Game:
                 player.draw() 
                 
                 
-            
+                bullet_positions=[]
                 for p in parts:
                     p.update_position(dt)
                     p.draw(True)
+                    bullet_positions.append([p.x,p.y])
                     #HIT DETECTION
                     perp_dist,moving_towards_player,time_to_min_dist,part_on_target = lineintersectionutil.perp_dist_part_player(p,[player.x,player.y],player_rad=player.rad, draw=False,screen=screen)
                     if player.invincible_timer<=0 and lineintersectionutil.norm([p.x-player.x,p.y-player.y])<=1 +p.rad + player.rad:
                         
                         player.health-=1
-                        reward=-1
+                        reward-=1
                         player.invincible_timer=INVINCIBILITY_PERIOD
                         player.colour = (0,255,0)
                         
-                    #draw_text(f'time_to_min_dist :{round(time_to_min_dist/1000,2)}  ,  {part_on_target}',screen,(SCREEN_WIDTH/2,10))
+                #DEBUG INFO
                 lineintersectionutil.draw_text(f'AI CONTROL : {("YES" if player.AI else "NO")}',screen,(SCREEN_WIDTH/1.5,0))
                 lineintersectionutil.draw_text(f'HEALTH : {player.health}',screen,(SCREEN_WIDTH/1.5,20))
                 lineintersectionutil.draw_text(f'OPTIMAL ACTION : {best_action}',screen,(SCREEN_WIDTH/1.5,40))
                 lineintersectionutil.draw_text(f'INVINCIBLE : {("YES" if player.invincible_timer>0 else "NO")}',screen,(SCREEN_WIDTH/1.5,60))
                 lineintersectionutil.draw_text(f'INVINCIBLE TIMER : {player.invincible_timer}',screen,(SCREEN_WIDTH/1.5,80))
 
-                #pg.display.update() -->moved to render
-                observation =0
-                done = player.health==0
+                if lineintersectionutil.get_distance_from_screen_edge([player.x,player.y],SCREEN_WIDTH,SCREEN_HEIGHT)<50:
+                    reward-=1000
+                observation = 0
+                done = player.health == 0 or self.time_since_game_start>1000*60*5
                 
+                observation=OrderedDict([('bullet_positions', np.array(bullet_positions,dtype=float32)), ('position', array([player.x ,  player.y], dtype=float32))])
                 return observation,reward,done
         
     
