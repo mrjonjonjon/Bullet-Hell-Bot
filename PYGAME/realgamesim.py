@@ -10,12 +10,13 @@ import lineintersectionutil
 import player_AI
 from lineintersectionutil import normalize
 from collections import OrderedDict
-
+from raycasting import *
 pg.display.init()
 pg.font.init()
 SCREEN_WIDTH,SCREEN_HEIGHT=800,600
 INVINCIBILITY_PERIOD = 1000
 PLAYER_COLOR = (255,255,0)
+PARTICLE_COLOR = (255,0,0)
 screen = pg.display.set_mode((SCREEN_WIDTH,SCREEN_HEIGHT))
 
 
@@ -27,14 +28,15 @@ class Particle:
     self.x = x
     self.y = y
     self.rad = rad
-    self.colour = (255, 0, 0)
+    self.colour = PARTICLE_COLOR
     self.thickness = 1
     self.velocity = velocity
     self.bounce=bounce
+    self.rect=None
 
   def draw(self,display_trajectory=False):
     global screen
-    pg.draw.circle(screen, self.colour, (self.x, self.y), self.rad)
+    self.rect=pg.draw.circle(screen, self.colour, (self.x, self.y), self.rad)
     if display_trajectory:
         wx,wy=pg.display.get_window_size()
         #TODO: COMPUTE THIS
@@ -78,7 +80,7 @@ class Particle:
               self.velocity[1]*=-1
       
 class Player:
-  def __init__(self, coord, rad,speed=5,colour=PLAYER_COLOR,AI=False):
+  def __init__(self, coord, rad,speed=5,colour=PLAYER_COLOR,AI=False,screen=None,game=None):
     x,y=coord
     self.x = x
     self.y = y
@@ -88,7 +90,7 @@ class Player:
     self.speed = speed
     self.velocity=[0,0]
     self.AI=AI
-    self.health=10
+    self.health=1
     #is above 0 if player is invincible
     self.invincible_timer=0
     self.dodge_roll_dist=100
@@ -97,13 +99,28 @@ class Player:
     self.dodge_roll_dir=[0,0]
     #above 0 if the player is dodgerolling
     self.dodge_roll_timer=0
-    self.running = True
+    self.rect=None
+    self.game=game
+    
+
     
 
   def draw(self,display_trajectory=False):
     global screen
-    pg.draw.circle(screen, self.colour, (self.x, self.y), self.rad)
+    self.rect = pg.draw.circle(screen, self.colour, (self.x, self.y), self.rad)
+    
 
+ 
+  def cast_rays(self):
+      distances=[]
+      for i in range(20):
+        angle = 2*np.pi/(20) *i
+        dir = np.cos(angle),np.sin(angle)
+        r=Ray([self.x,self.y],dir,500)
+        rect,dist = r.cast(10,screen,self.game.parts)
+        distances.append(dist)
+      return distances
+    
   def get_dir(self):
         keys = pg.key.get_pressed()  #checking pressed keys
         velocity=np.array([0,0])
@@ -187,20 +204,26 @@ class Player:
 
 
 class Game:
-    def __init__(self,FPS=60,AI_control=False) -> None:
+    def __init__(self,FPS=60,AI_control=False,num_particles=20,velocity_multiplier=1,player_rad=5) -> None:
         self.FPS=FPS
         #self.player=None
         #self.parts=None
         self.clock = pg.time.Clock()
         self.time_since_game_start=0
-        self.running=False
+        self.running=True
         self.AI_control=AI_control
         
-        self.player = Player(coord=(SCREEN_WIDTH/2, SCREEN_HEIGHT/2),rad=5,speed=0.1,colour=PLAYER_COLOR,AI=self.AI_control)
-        self.parts=self.spawn_particles(20,velocty_multiplier=0.6,bounce=True,uniformY=True,velocity=None)
+        self.player = Player(coord=(SCREEN_WIDTH/2, SCREEN_HEIGHT/2),rad=player_rad,speed=0.1,colour=PLAYER_COLOR,AI=self.AI_control,game=self)
+        self.parts=self.spawn_particles(num_particles,velocty_multiplier=velocity_multiplier,bounce=True,uniformY=True,velocity=None)
+        self.screen =screen
+    
+    def check_collisions(self):
+        part_indices = self.player.rect.collidelistall(self.parts)
+        for index in part_indices:
+            self.parts[index].colour = list(np.random.choice(range(256), size=3))
+            #print("COLOR CHANGED")
         
-    
-    
+        
     def render(self):
         pg.display.update()
         
@@ -269,6 +292,9 @@ class Game:
                             dir = player.get_dir()
                             if lineintersectionutil.norm(dir)>0:
                                 player.dodge_roll(list(dir))
+                        elif event.key == pg.K_z:
+                            self.AI_control= True if not self.AI_control else False
+                            self.player.AI = True if not self.player.AI else False
                         
             
                 model = player_AI.model(player,parts,rad=5)
@@ -282,14 +308,25 @@ class Game:
                 player.update_position(dt)
                 player.update_invincible(dt)
                 player.update_dodge_roll(dt)
+                ray_dists=player.cast_rays()
                 player.draw() 
                 
                 
                 bullet_positions=[]
+                bullet_velocities=[]
+                vectors_to_bullets=[]
+                bullet_distances=[]
                 for p in parts:
                     p.update_position(dt)
                     p.draw(True)
-                    bullet_positions.append([p.x,p.y])
+                    dist_between_bullet_player=lineintersectionutil.norm([p.x-player.x,p.y-player.y])
+                    if dist_between_bullet_player <200 and len(bullet_velocities)<20:
+                       
+                        bullet_velocities.append(array(p.velocity))
+                        bullet_positions.append(array([p.x,p.y]))
+                    #bullet_velocities.append(np.array(p.velocity))
+                    #vectors_to_bullets.append(np.array([p.x-player.x,p.y-player.y]))
+                    #reward -= dist_between_bullet_player
                     #HIT DETECTION
                     perp_dist,moving_towards_player,time_to_min_dist,part_on_target = lineintersectionutil.perp_dist_part_player(p,[player.x,player.y],player_rad=player.rad, draw=False,screen=screen)
                     if player.invincible_timer<=0 and lineintersectionutil.norm([p.x-player.x,p.y-player.y])<=1 +p.rad + player.rad:
@@ -298,7 +335,12 @@ class Game:
                         reward-=1
                         player.invincible_timer=INVINCIBILITY_PERIOD
                         player.colour = (0,255,0)
-                        
+                
+                
+                while len(bullet_velocities)<20:
+                    bullet_velocities.append(np.array([0.0,0.0]))
+                    bullet_positions.append(array([0.0,0.0]))
+                #self.check_collisions()
                 #DEBUG INFO
                 lineintersectionutil.draw_text(f'AI CONTROL : {("YES" if player.AI else "NO")}',screen,(SCREEN_WIDTH/1.5,0))
                 lineintersectionutil.draw_text(f'HEALTH : {player.health}',screen,(SCREEN_WIDTH/1.5,20))
@@ -306,19 +348,41 @@ class Game:
                 lineintersectionutil.draw_text(f'INVINCIBLE : {("YES" if player.invincible_timer>0 else "NO")}',screen,(SCREEN_WIDTH/1.5,60))
                 lineintersectionutil.draw_text(f'INVINCIBLE TIMER : {player.invincible_timer}',screen,(SCREEN_WIDTH/1.5,80))
 
-                if lineintersectionutil.get_distance_from_screen_edge([player.x,player.y],SCREEN_WIDTH,SCREEN_HEIGHT)<50:
-                    reward-=1000
-                observation = 0
-                done = player.health == 0 or self.time_since_game_start>1000*60*5
+                #REWARD SHAPING
+                dist_from_screen = lineintersectionutil.get_distance_from_screen_edge([player.x,player.y],SCREEN_WIDTH,SCREEN_HEIGHT,self.screen)
+                lineintersectionutil.draw_text(f'MIN SCREEN DISTANCE : {dist_from_screen}',screen,(SCREEN_WIDTH/1.5,100))
+                lineintersectionutil.draw_text(f'TIME SINCE GAME START : {self.time_since_game_start}',screen,(SCREEN_WIDTH/1.5,120))
+
+
                 
-                observation=OrderedDict([('bullet_positions', np.array(bullet_positions,dtype=float32)), ('position', array([player.x ,  player.y], dtype=float32))])
-                return observation,reward,done
+                if dist_from_screen<50:
+                    reward=-10000000000
+                observation = 0
+                terminated = player.health == 0
+                truncated = bool((self.time_since_game_start>1000*60))
+                #print(array(bullet_positions).shape,array(bullet_velocities).shape)
+                observation=OrderedDict([('position', array([player.x ,  player.y], dtype=float32)),
+                                         ('velocity',array(player.velocity,dtype=float32)),
+                                         ('bullet_positions', array(bullet_positions,dtype=float32)),
+                                         
+                                         ('bullet_velocities',array(bullet_velocities,dtype=float32)),
+                                         #('vectors_to_bullets',array(vectors_to_bullets)),
+                                         #('bullet_distances',array(bullet_distances,dtype=float32)),
+                                        
+                                         ])
+                lineintersectionutil.draw_text(f'REWARD : {reward}',screen,(SCREEN_WIDTH/1.5,140))
+                lineintersectionutil.draw_text(f'FPS : {round(1000/dt)}',screen,(SCREEN_WIDTH/1.5,160))
+                lineintersectionutil.draw_text(f'MIN_RAY_DIST : {np.min(array(ray_dists))}',screen,(SCREEN_WIDTH/1.5,180))
+
+
+                return observation,reward,terminated,truncated
         
     
     def start_game(self):
     ######### G A M E #############
-        self.running=True
+        #self.running=True
         #moved to init
+        pass
          
        
 

@@ -48,7 +48,7 @@ def project_onto(point:tuple,line_points:list):
     P = u + n*np.dot(x - u, n)
     return tuple(P)
 
-def get_distance_from_screen_edge(point:list,SCREEN_WIDTH,SCREEN_HEIGHT):
+def get_distance_from_screen_edge(point:list,SCREEN_WIDTH,SCREEN_HEIGHT,screen=None,player=None):
     window_lines = [[(0,0),(SCREEN_WIDTH,0)],
                         [(SCREEN_WIDTH,0),(SCREEN_WIDTH,SCREEN_HEIGHT)],
                         [(SCREEN_WIDTH,SCREEN_HEIGHT),(0,SCREEN_HEIGHT)],
@@ -58,10 +58,16 @@ def get_distance_from_screen_edge(point:list,SCREEN_WIDTH,SCREEN_HEIGHT):
     my_point = list(point)
     
     res=1000000000000000
+    minline=None
     for wl in window_lines:
         projected_point = project_onto(my_point,wl)
         perp_line = [projected_point[0] - point[0],projected_point[1]-point[1]]
-        res=min(res, norm(np.array(perp_line)))
+        if norm(np.array(perp_line))<res:
+            res=min(res, norm(np.array(perp_line)))
+            minline = projected_point
+        
+    if screen is not None:
+            pg.draw.line(screen,(0,255,0),(point[0],point[1]),(minline[0],minline[1]))
     return res
     
 #print(project_onto(point=(5,5),line_points=[(0,0),(1,0)]))
@@ -95,3 +101,6 @@ def perp_dist_part_player(p,player_position:list,player_rad,draw=False,screen=No
         
 
 
+def random_color():
+    color = list(np.random.choice(range(256), size=3))
+    return color

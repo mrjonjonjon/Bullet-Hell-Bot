@@ -6,6 +6,9 @@ from stable_baselines3 import DQN
 from stable_baselines3.common.env_checker import check_env
 from numpy import float32,array
 from collections import OrderedDict
+from stable_baselines3.common.logger import configure
+from stable_baselines3 import PPO
+
 class BulletHellEnv(gym.Env):
   """
   Custom Environment that follows gym interface.
@@ -30,7 +33,7 @@ class BulletHellEnv(gym.Env):
   }
   def __init__(self):
     super(BulletHellEnv, self).__init__()
-    self.game = realgamesim.Game(FPS=60,AI_control=True)
+    self.game = realgamesim.Game(FPS=60,AI_control=True,num_particles=50)
 
     self.action_space = spaces.Discrete(9)#9 movement, 8 dodgeroll
    
@@ -40,8 +43,15 @@ class BulletHellEnv(gym.Env):
     
     
     self.observation_space = spaces.Dict({
-    'position': spaces.Box(low=-np.inf, high=np.inf, shape=(2,)),
-    'bullet_positions': spaces.Box(low=-np.inf,high=np.inf,shape=(20,2))})
+     'position': spaces.Box(low=-np.inf, high=np.inf, shape=(2,)),
+     'velocity': spaces.Box(low=-np.inf, high=np.inf, shape=(2,)),
+    #fixed 20 bullets
+     'bullet_positions': spaces.Box(low=-np.inf,high=np.inf,shape=(20,2)),
+    #'bullet_distances':spaces.Box(low=-np.inf, high=np.inf, shape=(20,)),
+     'bullet_velocities':spaces.Box(low=-np.inf, high=np.inf, shape=(20,2)),
+     'spoke_distances':spaces.Box(low=-np.inf, high=np.inf, shape=(20,)),
+    
+    })
     print("IS INSTANCE???",self.observation_space.spaces,'\n',isinstance(spaces.Sequence,spaces.Tuple),'\n',self.observation_space.sample(),'\n')
     #spaces.Tuple((spaces.Discrete(2), spaces.Box(-1, 1, shape=(2,))))
 
@@ -66,8 +76,8 @@ class BulletHellEnv(gym.Env):
       #print("TYPE: ",action.item(),type(action.item()))
       #print(action,type(action))
       dir = self.ACTIONS[action]
-      observation,reward,terminated = self.game.step(dir)
-      truncated=False
+      observation,reward,terminated,truncated = self.game.step(dir)
+      #print(type(truncated))
       return observation,reward,terminated,truncated,info
   
   def render(self,mode='human'):
@@ -84,28 +94,44 @@ if __name__=='__main__':
 
         print("ENVIRONMENT IS VALID")
 
-        obs = env.reset()
-        #VERIFY THAT ENV WORKS
-        '''n_steps = 10
-        for _ in range(n_steps):
-            # Random action
-            action = env.action_space.sample()
-            obs, reward, done, truncated,info = env.step(action)
-            env.render()
-            if done:
-                obs = env.reset()'''
+        obs = env.reset()     
+        
         #TRAIN MODEL
-        model = DQN('MultiInputPolicy', env).learn(total_timesteps=10000000,progress_bar=True)
+        new_logger = configure('.')
+        #stable_baselines3.dqn.DQN(policy, env, 
+        # learning_rate=0.0001, 
+        # buffer_size=1000000, 
+        # learning_starts=50000,
+        # batch_size=32, 
+        # tau=1.0, 
+        # gamma=0.99,
+        # train_freq=4, 
+        # gradient_steps=1,
+        # replay_buffer_class=None, 
+        # replay_buffer_kwargs=None,
+        # optimize_memory_usage=False,
+        # target_update_interval=10000, 
+        # exploration_fraction=0.1,
+        # exploration_initial_eps=1.0, 
+        # exploration_final_eps=0.05,
+        # max_grad_norm=10,
+        # tensorboard_log=None,
+        # policy_kwargs=None, verbose=0, seed=None, device='auto', _init_setup_model=True)
+       # model = DQN('MultiInputPolicy', env,learning_starts=0,gamma=0.9,target_update_interval=100,train_freq=4,learning_rate=0.001)
+        model = PPO('MultiInputPolicy', env, verbose=1)
+
+        model.set_logger(new_logger)
+        model.learn(total_timesteps=20000,progress_bar=True)
         print("DONE LEARNING")
 
-        model.save("mlphell")
+        model.save("mlphell2")
         del model  # delete trained model to demonstrate loading
 
         # Load the trained agent
         # NOTE: if you have loading issue, you can pass `print_system_info=True`
         # to compare the system on which the model was trained vs the current one
         # model = DQN.load("dqn_lunar", env=env, print_system_info=True)
-        model = DQN.load("mlphell", env=env)
+        model = PPO.load("mlphell2", env=env)
 
 
         print("SHOWING POLICY")
